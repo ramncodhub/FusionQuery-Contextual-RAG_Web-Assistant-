@@ -7,6 +7,9 @@ langchain-huggingface>=0.0.1
 langchain-text-splitters>=0.2.0
 faiss-cpu>=1.8.0
 sentence-transformers>=2.6.0
-duckduckgo-search>=5.0.0
+duckduckgo-search
+ddgs
+wikipedia
 pypdf>=4.0.0
 pydantic>=2.0.0
+python-dotenv
