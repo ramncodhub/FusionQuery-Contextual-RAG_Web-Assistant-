@@ -26,22 +26,23 @@ def clear_vectorstore():
 
 
 def process_and_store_document(file_path: str) -> FAISS:
-    """Loads a PDF, clears old vector database, splits text into chunks,
-    embeds them using HuggingFace, and saves to local FAISS index.
+    """Loads a PDF, clears old vectors, splits into dense chunks,
+    embeds them, and saves to a local FAISS index.
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    # Remove old vector store before saving new document context
     clear_vectorstore()
 
     # 1. Load document
     loader = PyPDFLoader(file_path)
     docs = loader.load()
 
-    # 2. Split document into chunks
+    # 2. Dense chunking: 500 chars with 80 overlap isolates specific facts
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800, chunk_overlap=120
+        chunk_size=500,
+        chunk_overlap=80,
+        separators=["\n\n", "\n", ". ", " ", ""],
     )
     chunks = text_splitter.split_documents(docs)
 
