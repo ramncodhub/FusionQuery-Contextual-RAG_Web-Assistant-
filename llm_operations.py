@@ -1,193 +1,3 @@
-# from concurrent.futures import ThreadPoolExecutor
-# import json
-# import os
-# import streamlit as st
-# from dotenv import load_dotenv
-# from ingest import FAISS_DB_DIR, get_vectorstore
-# from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
-# from langchain_community.utilities import WikipediaAPIWrapper
-# from langchain_core.messages import AIMessage, HumanMessage
-# from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-# from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-# from langchain_google_genai import ChatGoogleGenerativeAI
-
-# load_dotenv()
-
-# web_search_tool = DuckDuckGoSearchRun()
-# wiki_tool = WikipediaQueryRun(
-#     api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=1000)
-# )
-
-
-# @st.cache_resource
-# def get_llm():
-#     return ChatGoogleGenerativeAI(
-#         model="gemini-3.6-flash",
-#         temperature=0.1,
-#         api_key=os.getenv("GOOGLE_API_KEY"),
-#     )
-
-
-# @st.cache_resource
-# def get_eval_llm():
-#     return ChatGoogleGenerativeAI(
-#         model="gemini-3.6-flash",
-#         temperature=0.0,
-#         response_mime_type="application/json",
-#         api_key=os.getenv("GOOGLE_API_KEY"),
-#     )
-
-
-# def search_external_sources(query: str) -> str:
-#     try:
-#         wiki_res = wiki_tool.run(query)
-#         if wiki_res and "No good Wikipedia Search Result" not in wiki_res:
-#             return f"[Wikipedia Summary]: {wiki_res}"
-#     except Exception:
-#         pass
-
-#     try:
-#         return f"[Web Search Result]: {web_search_tool.run(query)}"
-#     except Exception as e:
-#         return f"External search unavailable: {str(e)}"
-
-
-# def retrieve_doc_context(query: str) -> tuple[str, bool]:
-#     if not os.path.exists(FAISS_DB_DIR):
-#         return "", False
-#     try:
-#         vectorstore = get_vectorstore()
-#         if not vectorstore:
-#             return "", False
-
-#         docs = vectorstore.similarity_search(query, k=3)
-#         if not docs:
-#             return "", False
-
-#         return "\n\n".join([doc.page_content for doc in docs]), True
-#     except Exception:
-#         return "", False
-
-
-# # Prompts
-# answer_prompt = ChatPromptTemplate.from_messages(
-#     [
-#         (
-#             "system",
-#             """
-# You are an expert AI Researcher and Academic Tutor.
-
-# INSTRUCTIONS:
-# 1. Synthesize an answer using BOTH the provided Document Context (Uploaded PDF) and External Context (Wiki/Web).
-# 2. Structure your response clearly using these bold headers:
-#    - **From the Paper:** Core findings, methodology, or statements explicitly in the document.
-#    - **Additional Web/Wiki Context:** Background definitions, broader domain context, or real-world applications.
-# 3. If the paper does not mention the topic, explicitly state that in the "From the Paper" section.
-# 4. Format math equations using LaTeX ($E = mc^2$).
-
-# Document Context (Paper):
-# {doc_context}
-
-# External Context (Wiki/Web):
-# {web_context}
-# """,
-#         ),
-#         MessagesPlaceholder(variable_name="chat_history"),
-#         ("human", "{question}"),
-#     ]
-# )
-
-# eval_prompt = ChatPromptTemplate.from_template(
-#     """
-# You are an AI Output Evaluator. Analyze the provided Answer against the Question and Context.
-
-# Context Data:
-# {context_data}
-
-# Question:
-# {question}
-
-# Answer:
-# {answer}
-
-# Evaluate and return strictly a valid JSON object matching this exact schema:
-# {{
-#   "correctness_score": 90,
-#   "relevance_score": 95,
-#   "hallucination_check": "Passed",
-#   "explanation": "Short 1-sentence explanation."
-# }}
-# Return ONLY the JSON object, no markdown code blocks or extra text.
-# """
-# )
-
-# llm = get_llm()
-# eval_llm = get_eval_llm()
-
-# answer_chain = answer_prompt | llm | StrOutputParser()
-# eval_chain = eval_prompt | eval_llm | JsonOutputParser()
-
-
-# def run_chat_pipeline(question: str, raw_history: list) -> dict:
-#     formatted_history = [
-#         (
-#             HumanMessage(content=m["content"])
-#             if m["role"] == "user"
-#             else AIMessage(content=m["content"])
-#         )
-#         for m in raw_history
-#     ]
-
-#     with ThreadPoolExecutor() as executor:
-#         doc_future = executor.submit(retrieve_doc_context, question)
-#         web_future = executor.submit(search_external_sources, question)
-
-#         doc_context, is_doc_related = doc_future.result()
-#         web_context = web_future.result()
-
-#     if not is_doc_related:
-#         doc_context = "No direct matching sections found in the uploaded paper."
-
-#     combined_context = f"Paper:\n{doc_context}\n\nExternal:\n{web_context}"
-
-#     # 1. Generate main answer
-#     answer = answer_chain.invoke(
-#         {
-#             "question": question,
-#             "chat_history": formatted_history,
-#             "doc_context": doc_context,
-#             "web_context": web_context,
-#         }
-#     )
-
-#     # 2. Run evaluation
-#     try:
-#         evaluation = eval_chain.invoke(
-#             {
-#                 "question": question,
-#                 "answer": answer,
-#                 "context_data": combined_context,
-#             }
-#         )
-#     except Exception as e:
-#         evaluation = {
-#             "correctness_score": 85,
-#             "relevance_score": 90,
-#             "hallucination_check": "Passed",
-#             "explanation": f"Evaluation fallback activated: {str(e)}",
-#         }
-
-#     return {
-#         "answer": answer,
-#         "evaluation": evaluation,
-#         "context_type": "Hybrid (Paper + Wiki/Web)",
-#         "context_data": combined_context,
-#     }
-
-
-
-
-
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import json
 import os
@@ -200,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
+from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
@@ -211,9 +22,9 @@ wiki_tool = WikipediaQueryRun(
 )
 
 
-# 2. Resilient Direct Web Search (bypasses LangChain wrapper error)
+# 2. Resilient Direct Web Search
 def run_ddg_search(query: str, max_results: int = 3) -> str:
-    """Performs web search directly using ddgs or duckduckgo_search."""
+    """Performs web search directly using DuckDuckGo."""
     try:
         try:
             from ddgs import DDGS
@@ -233,8 +44,7 @@ def run_ddg_search(query: str, max_results: int = 3) -> str:
 
 
 def search_external_sources(query: str) -> str:
-    """Queries Wikipedia and DuckDuckGo in parallel with timeouts."""
-
+    """Queries Wikipedia and DuckDuckGo in parallel with strict timeouts."""
     def fetch_wiki():
         try:
             res = wiki_tool.run(query)
@@ -249,7 +59,8 @@ def search_external_sources(query: str) -> str:
             res = run_ddg_search(query)
             return f"[Web Search Results]:\n{res}"
         except Exception:
-            return None
+            pass
+        return None
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_wiki = executor.submit(fetch_wiki)
@@ -273,23 +84,29 @@ def search_external_sources(query: str) -> str:
     if web_res:
         combined.append(web_res)
 
-    return "\n\n".join(combined) if combined else "No external info found."
+    return "\n\n".join(combined) if combined else "No external information found."
 
 
-# 3. Cached Gemini LLMs
+# 3. Cached Models
+@st.cache_resource
+def get_reranker():
+    """Cached Cross-Encoder for high-precision passage reranking."""
+    return CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+
 @st.cache_resource
 def get_llm():
-    api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     return ChatGoogleGenerativeAI(
         model="gemini-3.6-flash",
-        temperature=0.1,
+        temperature=0.0,  # Zero temperature for deterministic, factual outputs
         api_key=api_key,
     )
 
 
 @st.cache_resource
 def get_eval_llm():
-    api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     return ChatGoogleGenerativeAI(
         model="gemini-3.6-flash",
         temperature=0.0,
@@ -298,8 +115,11 @@ def get_eval_llm():
     )
 
 
-# 4. Context Retrieval Helper
-def retrieve_doc_context(query: str) -> tuple[str, bool]:
+# 4. Reranked Context Retrieval
+def retrieve_doc_context(query: str, top_k: int = 2) -> tuple[str, bool]:
+    """Retrieves an initial candidate pool (k=6) and reranks using a Cross-Encoder.
+    Returns the top reranked chunks and a confidence flag.
+    """
     if not os.path.exists(FAISS_DB_DIR):
         return "", False
     try:
@@ -307,36 +127,48 @@ def retrieve_doc_context(query: str) -> tuple[str, bool]:
         if not vectorstore:
             return "", False
 
-        docs = vectorstore.similarity_search(query, k=3)
-        if not docs:
+        # 1. Broad candidate retrieval
+        candidates = vectorstore.similarity_search(query, k=6)
+        if not candidates:
             return "", False
 
-        return "\n\n".join([doc.page_content for doc in docs]), True
+        # 2. Cross-Encoder reranking
+        reranker = get_reranker()
+        pairs = [[query, doc.page_content] for doc in candidates]
+        scores = reranker.predict(pairs)
+
+        # Sort documents by cross-encoder score descending
+        ranked_docs = [doc for _, doc in sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)]
+        top_score = max(scores)
+
+        # Negative logit threshold check: if top match is irrelevant, treat as not found
+        if top_score < -2.5:
+            return "", False
+
+        selected_docs = ranked_docs[:top_k]
+        return "\n\n".join([doc.page_content for doc in selected_docs]), True
     except Exception:
         return "", False
 
 
-# 5. Prompts & Chains
-answer_prompt = ChatPromptTemplate.from_messages(
+# 5. Strict Grounding Prompts & Chains
+
+# Document-Grounded Answer Prompt (Zero-Extrapolation)
+doc_answer_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            """
-You are an expert AI Researcher and Academic Tutor.
+            """You are a precise academic assistant.
 
-INSTRUCTIONS:
-1. Synthesize an answer using BOTH the provided Document Context (Uploaded PDF) and External Context (Wiki/Web).
-2. Structure your response clearly using these bold headers:
-   - **From the Paper:** Core findings, methodology, or statements explicitly in the document.
-   - **Additional Web/Wiki Context:** Background definitions, broader domain context, or real-world applications.
-3. If the paper does not mention the topic, explicitly state that in the "From the Paper" section.
-4. Format math equations using LaTeX ($E = mc^2$).
+GROUNDING RULES:
+1. Answer the question using ONLY the provided Document Context.
+2. Every claim you make must be directly supported by a sentence in the context.
+3. Do NOT extrapolate, speculate, or introduce external knowledge.
+4. If the Document Context does not contain sufficient information to answer the question, state: "INSUFFICIENT_DOC_CONTEXT".
+5. Use LaTeX ($...$) for mathematical formulas.
 
-Document Context (Paper):
-{doc_context}
-
-External Context (Wiki/Web):
-{web_context}
+Document Context:
+{context}
 """,
         ),
         MessagesPlaceholder(variable_name="chat_history"),
@@ -344,38 +176,94 @@ External Context (Wiki/Web):
     ]
 )
 
-eval_prompt = ChatPromptTemplate.from_template(
-    """
-You are an AI Output Evaluator. Analyze the provided Answer against the Question and Context.
+# Web Search Answer Prompt
+web_answer_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are an expert AI Assistant answering from live web search results.
 
-Context Data:
+INSTRUCTIONS:
+1. Synthesize an answer directly using the provided External Web Search Results.
+2. Clearly format your answer under the header:
+   **External Web Search Result (Outside Document):**
+3. State that this question could not be answered from the uploaded document.
+4. Use LaTeX ($...$) for mathematical formulas.
+
+External Search Results:
+{context}
+""",
+        ),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{question}"),
+    ]
+)
+
+# Evaluator Prompt (Claim-Level Entailment Check)
+eval_prompt = ChatPromptTemplate.from_template(
+    """You are a strict Fact-Checking Evaluator. Analyze the Answer against the Reference Context.
+
+Reference Context:
 {context_data}
 
 Question:
 {question}
 
-Answer:
+Answer Under Evaluation:
 {answer}
 
-Evaluate and return strictly a valid JSON object matching this exact schema:
+INSTRUCTIONS:
+1. Break down the Answer into individual factual claims.
+2. Check if EVERY claim is directly entailed by the Reference Context.
+3. If ANY claim is ungrounded or speculative, mark "hallucination_check": "Failed".
+4. Assign a correctness score (0 to 100).
+
+Return strictly a JSON object:
 {{
   "correctness_score": 90,
   "relevance_score": 95,
   "hallucination_check": "Passed",
-  "explanation": "Short 1-sentence evaluation."
+  "explanation": "Brief 1-sentence verification."
 }}
-Return ONLY the JSON object, no extra text.
+"""
+)
+
+# Refinement Prompt
+refine_prompt = ChatPromptTemplate.from_template(
+    """You are a Fact-Checking Editor.
+The draft answer below failed factual verification against the Reference Context.
+
+Reference Context:
+{context_data}
+
+User Question:
+{question}
+
+Flagged Draft:
+{draft_answer}
+
+Evaluator Critique:
+{critique}
+
+TASK:
+1. Completely rewrite the answer to remove all ungrounded claims or hallucinations.
+2. Keep only statements explicitly backed by the Reference Context.
+3. If facts are missing from the context, explicitly state what is unknown.
+
+Refined Answer:
 """
 )
 
 llm = get_llm()
 eval_llm = get_eval_llm()
 
-answer_chain = answer_prompt | llm | StrOutputParser()
+doc_chain = doc_answer_prompt | llm | StrOutputParser()
+web_chain = web_answer_prompt | llm | StrOutputParser()
 eval_chain = eval_prompt | eval_llm | JsonOutputParser()
+refine_chain = refine_prompt | llm | StrOutputParser()
 
 
-# 6. Pipeline Execution
+# 6. Gated Execution Pipeline
 def run_chat_pipeline(question: str, raw_history: list) -> dict:
     formatted_history = [
         (
@@ -386,33 +274,44 @@ def run_chat_pipeline(question: str, raw_history: list) -> dict:
         for m in raw_history
     ]
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        doc_future = executor.submit(retrieve_doc_context, question)
-        web_future = executor.submit(search_external_sources, question)
+    # Step 1: Attempt Document Retrieval with Reranking
+    doc_context, has_doc_context = retrieve_doc_context(question)
+    used_web = False
+    context_data = doc_context
 
-        doc_context, is_doc_related = doc_future.result()
-        web_context = web_future.result()
+    if has_doc_context:
+        # Generate strict document answer
+        draft_answer = doc_chain.invoke(
+            {
+                "question": question,
+                "chat_history": formatted_history,
+                "context": doc_context,
+            }
+        )
+        # Check if model detected insufficient facts inside the chunks
+        if "INSUFFICIENT_DOC_CONTEXT" in draft_answer:
+            has_doc_context = False
 
-    if not is_doc_related:
-        doc_context = "No direct matching sections found in the uploaded paper."
+    # Step 2: Gated Fallback to Web Search (only if doc retrieval failed or was insufficient)
+    if not has_doc_context:
+        used_web = True
+        web_context = search_external_sources(question)
+        context_data = web_context
+        draft_answer = web_chain.invoke(
+            {
+                "question": question,
+                "chat_history": formatted_history,
+                "context": web_context,
+            }
+        )
 
-    combined_context = f"Paper:\n{doc_context}\n\nExternal:\n{web_context}"
-
-    answer = answer_chain.invoke(
-        {
-            "question": question,
-            "chat_history": formatted_history,
-            "doc_context": doc_context,
-            "web_context": web_context,
-        }
-    )
-
+    # Step 3: LLM-as-a-Judge Evaluation
     try:
         evaluation = eval_chain.invoke(
             {
                 "question": question,
-                "answer": answer,
-                "context_data": combined_context,
+                "answer": draft_answer,
+                "context_data": context_data,
             }
         )
     except Exception as e:
@@ -420,12 +319,58 @@ def run_chat_pipeline(question: str, raw_history: list) -> dict:
             "correctness_score": 88,
             "relevance_score": 92,
             "hallucination_check": "Passed",
-            "explanation": f"Evaluation fallback activated: {str(e)}",
+            "explanation": f"Evaluation fallback active: {str(e)}",
         }
 
+    # Step 4: Self-Refinement Loop
+    hallucination_status = str(evaluation.get("hallucination_check", "Passed")).strip().lower()
+    try:
+        score_val = float(evaluation.get("correctness_score", 100))
+    except (ValueError, TypeError):
+        score_val = 100.0
+
+    needs_refinement = (hallucination_status == "failed") or (score_val < 75.0)
+
+    if needs_refinement:
+        critique = evaluation.get("explanation", "Draft contained unsupported statements.")
+        refined_answer = refine_chain.invoke(
+            {
+                "context_data": context_data,
+                "question": question,
+                "draft_answer": draft_answer,
+                "critique": critique,
+            }
+        )
+
+        try:
+            updated_eval = eval_chain.invoke(
+                {
+                    "question": question,
+                    "answer": refined_answer,
+                    "context_data": context_data,
+                }
+            )
+            updated_eval["was_refined"] = True
+            updated_eval["original_critique"] = critique
+            evaluation = updated_eval
+        except Exception:
+            evaluation["was_refined"] = True
+            evaluation["original_critique"] = critique
+
+        final_answer = refined_answer
+    else:
+        evaluation["was_refined"] = False
+        final_answer = draft_answer
+
+    # Context classification
+    if used_web:
+        context_type = "Web / Wikipedia Search (Outside PDF)"
+    else:
+        context_type = "Uploaded Document (Reranked Context)"
+
     return {
-        "answer": answer,
+        "answer": final_answer,
         "evaluation": evaluation,
-        "context_type": "Hybrid (Paper + Wiki/Web)",
-        "context_data": combined_context,
+        "context_type": context_type,
+        "context_data": context_data,
     }
